@@ -1,0 +1,20 @@
+{
+  "name": "xyz-training-video",
+  "private": true,
+  "scripts": {
+    "data": "node make-data.js",
+    "studio": "remotion studio",
+    "render": "remotion render XYZ out/xyz-training.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.545",
+    "@remotion/google-fonts": "4.0.545",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.545"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.0",
+    "typescript": "5.6.3"
+  }
+}

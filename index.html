@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>XYZトレーニング</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <span class="brand">XYZトレーニング</span>
+    <span class="progress" id="progress" hidden></span>
+  </header>
+
+  <!-- スタート画面 -->
+  <section id="screen-start" class="screen">
+    <h1 class="logo" aria-label="Xを引いたらYを切ってZ待ち">
+      <span class="ln"><i class="lk x">X</i>を引いたら</span>
+      <span class="ln"><i class="lk y">Y</i>を切って</span>
+      <span class="ln"><i class="lk z">Z</i>待ち</span>
+    </h1>
+
+    <div class="demo hand" id="demoHand" aria-label="出題例"></div>
+
+    <div class="modes">
+      <button class="mode daily" id="startDaily" type="button">
+        <span class="mode-name">今日の10問<span class="daily-date" id="dailyDate"></span></span>
+        <span class="mode-desc" id="dailyDesc">全員同じ10問・毎日0時に更新</span>
+      </button>
+      <div class="mode-row">一向聴 → 聴牌　<span>Z＝待ち</span></div>
+      <button class="mode dark" id="startRandom" type="button">
+        <span class="mode-name">ランダム</span>
+        <span class="mode-desc" id="randomDesc">毎回ちがう手牌</span>
+      </button>
+      <button class="mode" id="startSeries" type="button">
+        <span class="mode-name">連続設問</span>
+        <span class="mode-desc">同じ13枚、Xだけ変わる</span>
+      </button>
+      <div class="mode-row">二向聴 → 一向聴　<span>Z＝聴牌に進む牌</span></div>
+      <button class="mode two" id="startTwo" type="button">
+        <span class="mode-name">ランダム</span>
+        <span class="mode-desc">受け入れを全部答える</span>
+      </button>
+      <button class="mode two-line" id="startTwoSeries" type="button">
+        <span class="mode-name">連続設問</span>
+        <span class="mode-desc">Xごとに受け入れ最大の打牌が変わる</span>
+      </button>
+    </div>
+
+    <details class="settings" id="settings">
+      <summary>ルールと設定</summary>
+      <ul class="rules">
+        <li>聴牌する切り方ならどれでも正解。待ちは切った牌に合わせて判定。</li>
+        <li>4面子1雀頭のみ（七対子・国士は対象外）。役の有無は問わない。</li>
+        <li>手牌で4枚使っている牌は待ちに含めない。</li>
+        <li>今日の10問：日付（日本時間）で問題が決まり、全員同じ。設定を変えていても初期値で採点。</li>
+        <li>正解で100点。減点なしの時間を過ぎると1秒ごとに減点。Zの減点なし時間は「基本 ＋ 1種ごとの秒数 × 種類数」。</li>
+        <li>二向聴：一向聴を保つ切り方なら正解（設定で「受け入れ最大のみ」にもできる）。二向聴の連続設問は常に受け入れ最大のみ正解。Zは部分点あり＝(当たり − 余計) ÷ 正解数。</li>
+      </ul>
+      <div class="settings-grid" id="settingsGrid"></div>
+      <button class="btn small" id="resetSettings" type="button">初期値に戻す</button>
+    </details>
+  </section>
+
+  <!-- 出題画面 -->
+  <section id="screen-play" class="screen" hidden>
+    <div class="series-tag" id="seriesTag" hidden></div>
+    <div class="status">
+      <div class="phase" id="phaseLabel"></div>
+      <div class="live"><span id="liveScore">100</span><small>点</small></div>
+    </div>
+    <div class="timer" id="timer"><div class="timer-fill" id="timerFill"></div></div>
+
+    <div class="table">
+      <div class="hand" id="hand"></div>
+      <div class="river" id="river"></div>
+    </div>
+
+    <div class="zpanel" id="zPanel" hidden>
+      <div class="palette" id="palette"></div>
+      <div class="actions">
+        <button class="btn" id="clearBtn" type="button">クリア</button>
+        <button class="btn primary" id="submitBtn" type="button">決定</button>
+      </div>
+    </div>
+
+    <div class="result" id="resultPanel" hidden>
+      <div class="verdict" id="verdict"></div>
+      <div class="breakdown" id="breakdown"></div>
+      <div class="palette review" id="reviewPalette"></div>
+      <div class="legend" id="legend">
+        <span class="lg hit">正解</span><span class="lg missed">選び忘れ</span><span class="lg extra">余計に選んだ</span>
+      </div>
+      <h3 class="answers-title" id="answersTitle">この手で聴牌する切り方</h3>
+      <div class="answers" id="answers"></div>
+      <button class="btn primary big" id="nextBtn" type="button">次の問題</button>
+    </div>
+  </section>
+
+  <!-- 結果画面 -->
+  <section id="screen-summary" class="screen" hidden>
+    <div class="total">
+      <div class="total-label">合計</div>
+      <div class="total-score"><span id="totalScore">0</span><small id="totalMax"></small></div>
+    </div>
+    <div class="daily-box" id="dailyBox" hidden>
+      <div class="daily-note" id="dailyNote"></div>
+      <button class="btn" id="shareBtn" type="button">結果をコピー</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <ol class="log" id="log"></ol>
+    <div class="actions">
+      <button class="btn" id="homeBtn" type="button">トップへ</button>
+      <button class="btn primary" id="againBtn" type="button">もう一度</button>
+    </div>
+  </section>
+
+  <footer class="credit">牌画像の漢字字形: <a href="https://kanjivg.tagaini.net" target="_blank" rel="noopener">KanjiVG</a> (CC BY-SA 3.0)</footer>
+</div>
+
+<script src="js/mahjong.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
