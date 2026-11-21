@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   const M = window.Mahjong;
+  const Cert = window.Cert;
   const $ = (id) => document.getElementById(id);
 
   // ---- モード --------------------------------------------------------------
@@ -28,7 +29,17 @@
     },
     // 今日の10問：日付で問題が決まる。全員同じ問題・初期設定で採点
     daily: { shanten: 1, zWord: '待ち', zPrompt: '待ちをすべて選んで決定', yFail: '聴牌しない牌を切った', tag: 'daily', daily: true },
+    // ランクチャレンジ：4モード×10問。問題ごとのモードは item.modeKey（下の SECTION_MODES）
+    challenge: { shanten: 1, tag: 'challenge', challenge: true },
   };
+  // ランクチャレンジの各モードが、どの出題モードと同じ見た目・判定か
+  const SECTION_MODES = ['random', 'series', 'two', 'twoSeries'];
+  const CHALLENGE_DESC = '4モード×10問・40問の消耗戦';
+
+  /** いま出題中の問題のモード（ランクチャレンジでは問題ごとに変わる） */
+  function curMode() {
+    return MODES[(game.item && game.item.modeKey) || game.mode];
+  }
 
   // ---- 設定 ----------------------------------------------------------------
 
@@ -92,9 +103,10 @@
   }
 
   /** モードごとの時間と減点の設定 */
-  function timing(mode) {
-    // 今日の10問は公平に比べられるよう、設定を変えていても初期値で採点する
-    const s = MODES[mode].daily ? DEFAULTS : settings;
+  function timing(mode, ranked) {
+    // 今日の10問とランクチャレンジは公平に比べられるよう、設定を変えていても初期値で採点する
+    if (ranked) return Object.assign({}, M.RANKED_TIMING[MODES[mode].shanten]);
+    const s = settings;
     if (MODES[mode].shanten === 2) {
       return {
         yGrace: s.y2Grace, yLimit: s.y2Limit, yPenalty: s.yPenalty,
@@ -183,7 +195,7 @@
   // ---- 画面切り替え ---------------------------------------------------------
 
   function show(name) {
-    for (const s of ['start', 'play', 'summary']) $('screen-' + s).hidden = s !== name;
+    for (const s of ['start', 'play', 'summary', 'cert', 'rank']) $('screen-' + s).hidden = s !== name;
     $('progress').hidden = name !== 'play';
     window.scrollTo(0, 0);
   }
@@ -252,9 +264,14 @@
   }
 
   function startSet(mode) {
+    if (mode === 'challenge') {
+      startChallenge();
+      return;
+    }
     game.mode = mode;
     game.results = [];
     game.queue = [];
+    game.answers = null;
     game.seriesNo = 0;
     if (MODES[mode].daily) {
       game.daily = M.generateDailySet(M.dailyDate());
@@ -266,7 +283,7 @@
 
   /** セットが終わったか。連続設問は同じ手牌の途中では終わらない */
   function setFinished() {
-    if (MODES[game.mode].daily) return game.queue.length === 0;
+    if (MODES[game.mode].daily || MODES[game.mode].challenge) return game.queue.length === 0;
     return game.results.length >= settings.questions && game.queue.length === 0;
   }
 
@@ -294,10 +311,16 @@
     if (game.queue.length === 0) fillQueue();
     game.item = game.queue.shift();
     const problem = game.item.problem;
-    const mode = MODES[game.mode];
+    const mode = curMode();
     const tag = $('seriesTag');
     tag.hidden = !mode.tag;
-    if (mode.tag === 'series') {
+    if (game.mode === 'challenge') {
+      const it = game.item;
+      const sec = M.CHALLENGE_SECTIONS[it.section];
+      tag.hidden = false;
+      tag.textContent = `${sec.label} ${it.no}/${M.CHALLENGE_PER_SECTION}` +
+        (it.seriesNo ? `・同じ13枚 ${it.idx}/${it.len}` : '') + `　${it.overall}/${game.total}`;
+    } else if (mode.tag === 'series') {
       tag.textContent = (mode.shanten === 2 ? '二向聴 ' : '') +
         `連続設問 ${game.item.seriesNo}　同じ13枚 ${game.item.idx} / ${game.item.len}`;
     } else if (mode.daily) {
@@ -314,7 +337,7 @@
       answer: null,     // 選んだ切り方に対応する { discard, waits, remaining }
       selected: new Set(),
       yPenalty: 0,
-      tm: timing(game.mode),
+      tm: timing(game.item.modeKey || game.mode, game.mode === 'challenge' || game.mode === 'daily'),
     };
     updateProgress();
     $('resultPanel').hidden = true;
@@ -376,17 +399,18 @@
     const q = game.q;
     if (q.phase === 'y') {
       q.yTime = q.limit;
-      finish({ ok: false, reason: '時間切れ（切る牌）' });
+      finish({ ok: false, timeout: 'y', reason: '時間切れ（切る牌）' });
     } else if (q.phase === 'z') {
       q.zTime = q.limit;
-      finish({ ok: false, reason: `時間切れ（${MODES[game.mode].zWord}）` });
+      finish({ ok: false, timeout: 'z', reason: `時間切れ（${curMode().zWord}）` });
     }
   }
 
   // ---- Y: 切る牌 ------------------------------------------------------------
 
   function yRule() {
-    const mode = MODES[game.mode];
+    if (game.mode === 'challenge') return M.CHALLENGE_SECTIONS[game.item.section].rule;
+    const mode = curMode();
     if (mode.forceMax) return 'max';
     return mode.shanten === 2 && settings.y2MaxOnly ? 'max' : 'any';
   }
@@ -408,7 +432,7 @@
     renderHandRow($('hand'), remaining13, null, false);
     showRiver(d);
 
-    const mode = MODES[game.mode];
+    const mode = curMode();
     const valid = q.problem.answers.find((a) => a.discard === d);
     const ans = M.correctDiscards(q.problem, yRule()).find((a) => a.discard === d);
     if (!valid) {
@@ -475,7 +499,7 @@
     q.zTime = elapsed();
     const judge = M.judgeWaits(q.answer.waits, [...q.selected].sort((a, b) => a - b));
     q.judge = judge;
-    const mode = MODES[game.mode];
+    const mode = curMode();
     if (judge.ok) {
       finish({ ok: true });
       return;
@@ -510,7 +534,19 @@
     }
     $('liveScore').textContent = score;
 
+    // ランクチャレンジ：サーバーに送る答え（点数は送らない。サーバーが採点し直す）
+    if (game.answers) {
+      game.answers.push({
+        y: q.discard,
+        z: [...q.selected].sort((a, b) => a - b),
+        yt: Math.round(q.yTime * 1000) / 1000,
+        zt: prevPhase === 'y' ? null : Math.round(q.zTime * 1000) / 1000,
+        to: outcome.timeout || null,
+      });
+    }
     game.results.push({
+      shanten: curMode().shanten,
+      section: game.item.section,
       ok: outcome.ok,
       partial: !!outcome.partial,
       score,
@@ -539,7 +575,7 @@
   function renderResult(outcome, score) {
     const q = game.q;
     const tm = q.tm;
-    const mode = MODES[game.mode];
+    const mode = curMode();
     const v = $('verdict');
     if (outcome.ok) {
       v.className = 'verdict ok';
@@ -613,8 +649,13 @@
 
     let label = '次の問題';
     if (setFinished()) label = '結果を見る';
-    else if (MODES[game.mode].tag === 'series' && game.queue.length > 0) label = '同じ13枚で次のX';
-    else if (MODES[game.mode].tag === 'series') label = '次の手牌へ';
+    else if (game.mode !== 'challenge' && curMode().tag === 'series' && game.queue.length > 0) label = '同じ13枚で次のX';
+    else if (game.mode !== 'challenge' && curMode().tag === 'series') label = '次の手牌へ';
+    else if (game.mode === 'challenge' && game.queue.length && game.queue[0].section !== game.item.section) {
+      label = `次は ${M.CHALLENGE_SECTIONS[game.queue[0].section].label}`;
+    } else if (game.mode === 'challenge' && game.item.seriesNo && game.queue.length && game.queue[0].seriesNo === game.item.seriesNo) {
+      label = '同じ13枚で次のX';
+    }
     $('nextBtn').textContent = label;
     $('resultPanel').hidden = false;
     $('nextBtn').focus({ preventScroll: true });
@@ -627,6 +668,10 @@
 
   function onNext() {
     if (setFinished()) {
+      if (MODES[game.mode].challenge) {
+        submitChallenge();
+        return;
+      }
       if (MODES[game.mode].daily) saveDaily();
       renderSummary();
       show('summary');
@@ -644,7 +689,6 @@
 
   function renderSummary() {
     const rs = game.results;
-    const mode = MODES[game.mode];
     const total = rs.reduce((s, r) => s + r.score, 0);
     $('totalScore').textContent = total;
     $('totalMax').textContent = '/ ' + rs.length * 100;
@@ -656,13 +700,15 @@
       stat(ay == null ? '—' : ay.toFixed(1) + 's', 'Yの平均時間') +
       stat(az == null ? '—' : az.toFixed(1) + 's', 'Zの平均時間');
     renderDailySummary();
+    $('stats').className = 'stats';
+    $('challengeBox').hidden = true;
     const log = $('log');
     log.innerHTML = '';
     rs.forEach((r, i) => {
       const li = document.createElement('li');
       let waits = '';
       if (r.waits.length) {
-        waits = mode.shanten === 2
+        waits = r.shanten === 2
           ? `受け入れ${r.waits.length}種`
           : r.waits.map(M.tileName).join('・') + '待ち';
       }
@@ -765,6 +811,222 @@
     $('shareBtn').textContent = ok ? 'コピーしました' : text;
   }
 
+  // ---- サーバーとのやりとり ---------------------------------------------------
+  // 端末ごとの合言葉（ランダムな文字列）。名前の持ち主の証明になるので、ほかの人に見せない
+  const PLAYER_KEY = 'xyz-training-player-v1';
+
+  function playerToken() {
+    let t = null;
+    try { t = localStorage.getItem(PLAYER_KEY); } catch (e) { /* 保存できない環境 */ }
+    if (!t || !/^[0-9a-f]{64}$/.test(t)) {
+      t = [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, '0')).join('');
+      try { localStorage.setItem(PLAYER_KEY, t); } catch (e) { /* 保存できない環境 */ }
+    }
+    return t;
+  }
+
+  /** サーバーがある場所（公開サイトや wrangler での確認）で開いているか */
+  function serverAvailable() {
+    return location.protocol.startsWith('http') && !/claude(usercontent)?\.(ai|com)$/.test(location.hostname);
+  }
+
+  async function api(path, body) {
+    const res = await fetch(path, {
+      method: body ? 'POST' : 'GET',
+      headers: Object.assign({ 'x-player-token': playerToken() }, body ? { 'content-type': 'application/json' } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* 応答が JSON でない */ }
+    if (!res.ok) throw new Error(data.error || `通信に失敗しました（${res.status}）`);
+    return data;
+  }
+
+  let toastTimer = 0;
+  function toast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 4000);
+  }
+
+  // ---- ランクチャレンジ -------------------------------------------------------
+
+  let me = { name: null, loaded: false };
+
+  async function loadMe() {
+    if (!serverAvailable()) return;
+    try {
+      me = { name: (await api('/api/name')).name, loaded: true };
+    } catch (e) { /* つながらなくても遊べる */ }
+    renderMe();
+  }
+
+  function renderMe() {
+    $('meName').textContent = me.name || '未登録';
+  }
+
+  async function startChallenge() {
+    if (!serverAvailable()) {
+      toast('ランクチャレンジは公開サイト（xyz-training.pages.dev）で遊べます');
+      return;
+    }
+    const btn = $('startChallenge');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    $('challengeDesc').textContent = '問題を準備中…';
+    try {
+      const ses = await api('/api/challenge/start', {});
+      const packs = await Promise.all(
+        ses.packs.map((n, s) => fetch(`packs/${ses.version}/${s}/${n}.json`).then((r) => {
+          if (!r.ok) throw new Error('問題を読み込めませんでした');
+          return r.json();
+        })),
+      );
+      game.mode = 'challenge';
+      game.results = [];
+      game.answers = [];
+      game.challenge = { id: ses.id };
+      game.queue = [];
+      packs.forEach((items, s) => items.forEach((it, i) => game.queue.push({
+        problem: { hand: it.hand, draw: it.draw, answers: it.answers },
+        section: s,
+        modeKey: SECTION_MODES[s],
+        seriesNo: it.seriesNo,
+        idx: it.idx,
+        len: it.len,
+        no: i + 1,
+        overall: game.queue.length + 1,
+      })));
+      game.total = game.queue.length;
+      show('play');
+      nextQuestion();
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      btn.disabled = false;
+      $('challengeDesc').textContent = CHALLENGE_DESC;
+    }
+  }
+
+  async function submitChallenge() {
+    renderSummary();
+    show('summary');
+    const box = $('challengeBox');
+    box.hidden = false;
+    box.innerHTML = '<div class="ch-note">採点中…</div>';
+    try {
+      const r = await api('/api/challenge/finish', { id: game.challenge.id, answers: game.answers });
+      game.challenge.result = r;
+      if (r.name) me.name = r.name;
+      renderChallengeSummary();
+    } catch (e) {
+      box.innerHTML = `<div class="ch-note bad">${Cert.esc(e.message)}</div>`;
+    }
+  }
+
+  function renderChallengeSummary() {
+    const r = game.challenge.result;
+    $('totalScore').textContent = r.score;
+    $('totalMax').textContent = '/ ' + Cert.MAX;
+    $('stats').className = 'stats four';
+    $('stats').innerHTML = r.sections.map((s, i) => stat(s.score, Cert.SECTION_LABELS[i])).join('');
+    const box = $('challengeBox');
+    const rank = r.flagged
+      ? '<div class="ch-note bad">回答が速すぎる問題があったため、ランキングには載りません</div>'
+      : `<div class="ch-ranks"><span>今週 <b>${r.weekRank}位</b></span><span>歴代 <b>${r.allRank}位</b></span></div>`;
+    if (me.name) {
+      box.innerHTML = rank + `<button class="btn primary big" id="toCert" type="button">成績証明書を見る</button>`;
+      $('toCert').addEventListener('click', () => openCert(r.id));
+    } else {
+      box.innerHTML = rank +
+        '<form class="name-form" id="nameForm">' +
+        '<label for="nameInput">名前を登録すると、ランキングに載って成績証明書が発行されます</label>' +
+        '<div class="name-row"><input id="nameInput" maxlength="10" autocomplete="nickname" placeholder="10文字まで" required>' +
+        '<button class="btn primary" type="submit">登録</button></div>' +
+        '<small>ひらがな・カタカナ・漢字・英数字。この端末に結び付きます</small></form>';
+      $('nameForm').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        try {
+          me.name = (await api('/api/name', { name: $('nameInput').value })).name;
+          renderMe();
+          openCert(r.id);
+        } catch (e) {
+          toast(e.message);
+        }
+      });
+    }
+  }
+
+  // ---- 成績証明書 ---------------------------------------------------------------
+
+  async function openCert(id) {
+    try {
+      const run = await api('/api/run/' + id);
+      $('certBox').innerHTML = Cert.certHTML(run);
+      $('certX').href = Cert.xIntentUrl(run);
+      $('certCopy').onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(Cert.certUrl(run.id));
+          toast('証明書のリンクをコピーしました');
+        } catch (e) {
+          toast(Cert.certUrl(run.id));
+        }
+      };
+      show('cert');
+    } catch (e) {
+      toast(e.message);
+    }
+  }
+
+  // ---- ランキング ---------------------------------------------------------------
+
+  let rankPeriod = 'week';
+
+  async function openRanking(period) {
+    if (!serverAvailable()) {
+      toast('ランキングは公開サイト（xyz-training.pages.dev）で見られます');
+      return;
+    }
+    if (period) rankPeriod = period;
+    show('rank');
+    for (const b of document.querySelectorAll('.rank-tabs button')) b.setAttribute('aria-selected', String(b.dataset.period === rankPeriod));
+    const list = $('rankList');
+    list.innerHTML = '<li class="rank-empty">読み込み中…</li>';
+    try {
+      const d = await api('/api/ranking?period=' + rankPeriod);
+      list.innerHTML = '';
+      if (!d.rows.length) list.innerHTML = '<li class="rank-empty">まだ記録がありません。一番乗りのチャンス</li>';
+      for (const r of d.rows) {
+        const li = document.createElement('li');
+        li.className = 'rank-row' + (r.me ? ' me' : '') + (r.rank <= 3 ? ' top' + r.rank : '');
+        li.innerHTML =
+          `<span class="rk">${r.rank}</span>` +
+          `<span class="nm">${Cert.esc(r.name)}<small>${r.sections.join(' · ')}</small></span>` +
+          `<span class="sc">${r.score}</span>`;
+        li.addEventListener('click', () => openCert(r.id));
+        list.appendChild(li);
+      }
+      $('rankWeek').textContent = d.week ? `${d.week.slice(5).replace('-', '/')} の週（月曜0時に切り替え）` : 'すべての期間';
+    } catch (e) {
+      list.innerHTML = `<li class="rank-empty">${Cert.esc(e.message)}</li>`;
+    }
+  }
+
+  async function changeName(ev) {
+    ev.preventDefault();
+    try {
+      me.name = (await api('/api/name', { name: $('renameInput').value })).name;
+      renderMe();
+      $('renameForm').hidden = true;
+      toast('名前を変更しました');
+      openRanking();
+    } catch (e) {
+      toast(e.message);
+    }
+  }
+
   // ---- 起動 -----------------------------------------------------------------
 
   function renderDemo() {
@@ -782,6 +1044,18 @@
     renderDemo();
     updateModeDesc();
     updateDailyButton();
+    loadMe();
+    $('startChallenge').addEventListener('click', () => startChallenge());
+    $('openRanking').addEventListener('click', () => openRanking());
+    for (const b of document.querySelectorAll('.rank-tabs button')) b.addEventListener('click', () => openRanking(b.dataset.period));
+    $('rankHome').addEventListener('click', () => show('start'));
+    $('certHome').addEventListener('click', () => { renderDemo(); updateDailyButton(); show('start'); });
+    $('certRank').addEventListener('click', () => openRanking('week'));
+    $('renameOpen').addEventListener('click', () => {
+      $('renameForm').hidden = !$('renameForm').hidden;
+      $('renameInput').value = me.name || '';
+    });
+    $('renameForm').addEventListener('submit', changeName);
     $('startDaily').addEventListener('click', () => startSet('daily'));
     $('shareBtn').addEventListener('click', copyShare);
     $('startRandom').addEventListener('click', () => startSet('random'));

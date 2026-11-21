@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>XYZトレーニング</title>
+<meta name="description" content="Xを引いたらYを切ってZ待ち。一向聴・二向聴の手牌から、切る牌と待ちを反射で答える麻雀トレーニング。">
+<meta property="og:title" content="XYZトレーニング">
+<meta property="og:description" content="Xを引いたらYを切ってZ待ち。切る牌と待ちを反射で答える麻雀トレーニング。">
+<meta property="og:image" content="https://xyz-training.pages.dev/og.png">
+<meta property="og:url" content="https://xyz-training.pages.dev/">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,6 +35,14 @@
     <div class="demo hand" id="demoHand" aria-label="出題例"></div>
 
     <div class="modes">
+      <button class="mode challenge" id="startChallenge" type="button">
+        <span class="mode-name">ランクチャレンジ</span>
+        <span class="mode-desc" id="challengeDesc">4モード×10問・40問の消耗戦</span>
+      </button>
+      <div class="me-row">
+        <span>名前：<b id="meName">未登録</b></span>
+        <button class="btn small" id="openRanking" type="button">ランキング</button>
+      </div>
       <button class="mode daily" id="startDaily" type="button">
         <span class="mode-name">今日の10問<span class="daily-date" id="dailyDate"></span></span>
         <span class="mode-desc" id="dailyDesc">全員同じ10問・毎日0時に更新</span>
@@ -59,6 +73,8 @@
         <li>聴牌する切り方ならどれでも正解。待ちは切った牌に合わせて判定。</li>
         <li>4面子1雀頭のみ（七対子・国士は対象外）。役の有無は問わない。</li>
         <li>手牌で4枚使っている牌は待ちに含めない。</li>
+        <li>ランクチャレンジ：4モードを10問ずつ（計40問・4000点満点）。毎回ちがう問題で、採点はサーバーでやり直す。設定は初期値で固定。ランキングは1人1件（最高記録）。</li>
+        <li>記録について：ランクチャレンジの名前・点数・日時はサーバーに保存し、ランキングと成績証明書で公開します。名前はこの端末のブラウザに保存した合言葉に結び付きます（ブラウザのデータを消すと引き継げません）。メールアドレスなどの個人情報は集めていません。</li>
         <li>今日の10問：日付（日本時間）で問題が決まり、全員同じ。設定を変えていても初期値で採点。</li>
         <li>正解で100点。減点なしの時間を過ぎると1秒ごとに減点。Zの減点なし時間は「基本 ＋ 1種ごとの秒数 × 種類数」。</li>
         <li>二向聴：一向聴を保つ切り方なら正解（設定で「受け入れ最大のみ」にもできる）。二向聴の連続設問は常に受け入れ最大のみ正解。Zは部分点あり＝(当たり − 余計) ÷ 正解数。</li>
@@ -109,6 +125,7 @@
       <div class="total-label">合計</div>
       <div class="total-score"><span id="totalScore">0</span><small id="totalMax"></small></div>
     </div>
+    <div class="challenge-box" id="challengeBox" hidden></div>
     <div class="daily-box" id="dailyBox" hidden>
       <div class="daily-note" id="dailyNote"></div>
       <button class="btn" id="shareBtn" type="button">結果をコピー</button>
@@ -121,10 +138,45 @@
     </div>
   </section>
 
+  <!-- 成績証明書 -->
+  <section id="screen-cert" class="screen" hidden>
+    <div id="certBox"></div>
+    <a class="btn x-post big" id="certX" href="#" target="_blank" rel="noopener">証明書を X にポスト</a>
+    <div class="actions three">
+      <button class="btn" id="certCopy" type="button">URLコピー</button>
+      <button class="btn" id="certRank" type="button">ランキング</button>
+      <button class="btn" id="certHome" type="button">トップへ</button>
+    </div>
+  </section>
+
+  <!-- ランキング -->
+  <section id="screen-rank" class="screen" hidden>
+    <div class="rank-head">
+      <h2>ランキング</h2>
+      <div class="rank-tabs" role="tablist">
+        <button type="button" role="tab" data-period="week" aria-selected="true">今週</button>
+        <button type="button" role="tab" data-period="all" aria-selected="false">歴代</button>
+      </div>
+    </div>
+    <div class="rank-week" id="rankWeek"></div>
+    <ol class="rank-list" id="rankList"></ol>
+    <div class="rename">
+      <button class="btn small" id="renameOpen" type="button">名前を変更</button>
+      <form id="renameForm" class="name-row" hidden>
+        <input id="renameInput" maxlength="10" autocomplete="nickname" required>
+        <button class="btn primary" type="submit">変更</button>
+      </form>
+    </div>
+    <button class="btn" id="rankHome" type="button">トップへ</button>
+  </section>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
   <footer class="credit">牌画像の漢字字形: <a href="https://kanjivg.tagaini.net" target="_blank" rel="noopener">KanjiVG</a> (CC BY-SA 3.0)</footer>
 </div>
 
 <script src="js/mahjong.js"></script>
+<script src="js/cert.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

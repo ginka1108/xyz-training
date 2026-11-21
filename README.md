@@ -31,6 +31,7 @@
 ```bash
 python3 -m http.server 8765    # → http://127.0.0.1:8765/
 node tests/mahjong.test.js     # テスト
+node tests/server.test.mjs     # 名前・採点・証明書のテスト
 ```
 
 ## 問題の作り方
@@ -52,6 +53,17 @@ node tests/mahjong.test.js     # テスト
 - 設定を変えていても、採点は初期値で行う。
 - 記録はブラウザに日付ごとに保存（初回の点・ベスト・回数）。結果画面の「結果をコピー」で `○○△×…` 付きの文字列をコピーできる。
 - サーバーで採点し直すときは、同じ `mahjong.js` で `generateDailySet(date)` を呼べば同じ問題が得られる。
+
+## ランクチャレンジとランキング
+- 4モード×10問（計40問・4000点満点）。設定は初期値で固定。
+- 問題は「パック」（1モード10問）単位。`scripts/build-site.js` がビルド時に各モード500個を `site/packs/v1/<モード>/<番号>.json` に作る。開始時にサーバーが各モードのパック番号を選ぶ。
+  - サーバー（Cloudflare の無料プラン）は1回 10ms しか計算できないため、その場で問題を作らない。
+  - 問題の作り方を変えたら `CHALLENGE_VERSION` を上げる。
+- ブラウザは答えと時間だけを送り、サーバーが `Mahjong.gradeQuestion` で採点し直す。同じ挑戦は1回だけ、開始から60分以内、申告時間の合計が実際の経過時間を超えたら受け付けない。人間に無理な速さの答えがあればランキングから外す。
+- 名前は端末ごとの合言葉（ブラウザに保存）に結び付く。表記ゆれ（カタカナ/ひらがな・大文字/小文字）は同じ名前扱いで、重複不可。禁止語はシャドウ（本人以外には「名無しさん」）。`server/names.mjs`
+- 成績証明書：`/c/<記録ID>` の公開ページ（X に貼るとカードが出る）。表示は `js/cert.js` を画面とサーバーで共用。
+- サーバー：`functions/`（Cloudflare Pages Functions）と `server/`。データベースは D1（`DB`）。設定手順は `docs/hosting.md` の 7.
+- 手元での確認：`node scripts/build-site.js` の後、`npx wrangler pages dev site --d1 DB --binding ADMIN_KEY=test`
 
 ## 今後の拡張メモ
 - 聴牌版にも「待ち枚数最大の切り方のみ正解」を付けるなら `yRule()` の条件を広げるだけ。

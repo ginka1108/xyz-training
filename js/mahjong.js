@@ -671,6 +671,92 @@
     return { date, seed, problems };
   }
 
+
+  // ---- ランクチャレンジ -------------------------------------------------------
+  // 4つのモードを10問ずつ、計40問。問題はサーバーが渡すシードで決まり、
+  // サーバーも同じ関数で問題を作り直して採点し直す（gradeQuestion）。
+
+  /** ランキング対象の採点設定（アプリの初期値と同じ）。変えるとランキングの公平さが崩れるので注意 */
+  const RANKED_TIMING = {
+    1: { yGrace: 5, yLimit: 15, yPenalty: 5, zBase: 3, zPerKind: 3, zLimit: 40, zPenalty: 3, minScore: 10 },
+    2: { yGrace: 8, yLimit: 25, yPenalty: 5, zBase: 5, zPerKind: 2, zLimit: 60, zPenalty: 3, minScore: 10 },
+  };
+
+  const CHALLENGE_SECTIONS = [
+    { key: 'one', label: '聴牌ランダム', shanten: 1, series: false, rule: 'any', partial: false },
+    { key: 'oneSeries', label: '聴牌連続', shanten: 1, series: true, rule: 'any', partial: false },
+    { key: 'two', label: '二向聴ランダム', shanten: 2, series: false, rule: 'any', partial: true },
+    { key: 'twoSeries', label: '二向聴連続', shanten: 2, series: true, rule: 'max', partial: true },
+  ];
+  const CHALLENGE_PER_SECTION = 10;
+  const CHALLENGE_VERSION = 'v1';
+  const CHALLENGE_PACKS = 500; // モードごとのパック数（0〜499）
+
+  /**
+   * ランクチャレンジの1モード分（10問）の「パック」。パック番号から決まる。
+   * サイトを作るときに全パックを静的ファイルにしておき、サーバーは番号を選ぶだけにする
+   * （無料プランのサーバーは1回 10ms しか計算できないため、その場で問題を作らない）。
+   * 戻り値: [{ problem, seriesNo, idx, len }]（10問）
+   */
+  function generateChallengePack(section, packNo) {
+    const sec = CHALLENGE_SECTIONS[section];
+    const rng = seededRng('xyz-pack-' + CHALLENGE_VERSION + '|' + section + '|' + packNo);
+    const items = [];
+    const seen = new Set();
+    const key = (p) => shapeKey(p.hand, p.draw);
+    if (!sec.series) {
+      for (let i = 0; i < CHALLENGE_PER_SECTION; i++) {
+        const accept = (p) => !seen.has(key(p));
+        const p = sec.shanten === 2 ? generateTwoShantenProblem(rng, { accept }) : generateOneShantenProblem(rng, { accept });
+        seen.add(key(p));
+        items.push({ problem: p, seriesNo: null, idx: i + 1, len: CHALLENGE_PER_SECTION });
+      }
+      return items;
+    }
+    // 同じ13枚で3〜5問ずつ。合計がちょうど10問になるよう、最後の端数は2問のセットで埋める
+    let left = CHALLENGE_PER_SECTION;
+    let no = 0;
+    while (left > 0) {
+      const gen = sec.shanten === 2 ? generateTwoShantenSeries : generateSeries;
+      const s = gen(rng, { minLen: Math.min(3, left), maxLen: Math.min(5, left) });
+      let k = Math.min(s.problems.length, left);
+      if (left - k === 1) k -= 1; // 1問だけ余らないように
+      no++;
+      s.problems.slice(0, k).forEach((p, i) => items.push({ problem: p, seriesNo: no, idx: i + 1, len: k }));
+      left -= k;
+    }
+    return items;
+  }
+
+  /**
+   * 1問の採点。画面とサーバーの両方で使う。
+   * rule: { rule: 'any'|'max', partial: bool }、tm: 時間と減点の設定
+   * ans: { y: 切った牌 | null, z: 選んだ牌の配列, yTime, zTime, timeout: 'y'|'z'|null }
+   * 戻り値: { score, result: 'ok'|'part'|'ng', reason, answer: 正しかった切り方 | null }
+   */
+  function gradeQuestion(problem, rule, tm, ans) {
+    const ng = (reason, answer) => ({ score: 0, result: 'ng', reason, answer: answer || null });
+    if (ans.timeout === 'y' || ans.y == null) return ng('timeout-y');
+    if (!(ans.yTime >= 0) || ans.yTime > tm.yLimit) return ng('timeout-y');
+    const valid = problem.answers.find((a) => a.discard === ans.y);
+    if (!valid) return ng('bad-y');
+    const answer = correctDiscards(problem, rule.rule).find((a) => a.discard === ans.y);
+    if (!answer) return ng('not-max');
+    const zGrace = tm.zBase + tm.zPerKind * answer.waits.length;
+    const zLimit = Math.max(tm.zLimit, zGrace + 5);
+    if (ans.timeout === 'z' || !(ans.zTime >= 0) || ans.zTime > zLimit) return ng('timeout-z', answer);
+    const z = [...new Set((ans.z || []).filter((t) => Number.isInteger(t) && t >= 0 && t < 34))].sort((a, b) => a - b);
+    const judge = judgeWaits(answer.waits, z);
+    if (judge.ok) {
+      return { score: scoreQuestion(tm, ans.yTime, ans.zTime, answer.waits.length, 1).score, result: 'ok', reason: '', answer };
+    }
+    const acc = zAccuracy(judge, answer.waits.length);
+    if (rule.partial && acc > 0) {
+      return { score: scoreQuestion(tm, ans.yTime, ans.zTime, answer.waits.length, acc).score, result: 'part', reason: 'partial', answer };
+    }
+    return ng('bad-z', answer);
+  }
+
   const api = {
     tileCode,
     tileName,
@@ -700,6 +786,13 @@
     dailyDate,
     generateDailySet,
     DAILY_VERSION,
+    RANKED_TIMING,
+    CHALLENGE_SECTIONS,
+    CHALLENGE_PER_SECTION,
+    CHALLENGE_VERSION,
+    CHALLENGE_PACKS,
+    generateChallengePack,
+    gradeQuestion,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

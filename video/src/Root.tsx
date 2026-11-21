@@ -2,6 +2,7 @@ import React from 'react';
 import { Composition, Series, continueRender, delayRender, staticFile } from 'remotion';
 import data from './data.json';
 import { Daily, Outro, Play, Title, playLength } from './scenes';
+import { Og } from './Og';
 
 // フォントは public/fonts に置いた、動画で使う文字だけのサブセット
 const fontHandle = delayRender('fonts');
@@ -69,5 +70,8 @@ const Video: React.FC = () => (
 );
 
 export const Root: React.FC = () => (
-  <Composition id="XYZ" component={Video} durationInFrames={TOTAL} fps={30} width={1920} height={1080} />
+  <>
+    <Composition id="XYZ" component={Video} durationInFrames={TOTAL} fps={30} width={1920} height={1080} />
+    <Composition id="OG" component={Og} durationInFrames={1} fps={30} width={1200} height={630} />
+  </>
 );
