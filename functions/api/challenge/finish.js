@@ -24,7 +24,9 @@ export async function onRequestPost({ request, env }) {
   if (!mark.meta || mark.meta.changes !== 1) return fail('この挑戦はもう記録済みです', 409);
 
   // 問題パックを読む（静的ファイル）
-  const packs = ses.packs.split(',').map(Number);
+  const [ver, list] = ses.packs.includes(':') ? ses.packs.split(':') : ['v1', ses.packs];
+  if (ver !== M.CHALLENGE_VERSION) return fail('問題の作り方が更新されたため、この挑戦は記録できません。もう一度挑戦してください', 410);
+  const packs = list.split(',').map(Number);
   const items = [];
   for (let s = 0; s < packs.length; s++) {
     const url = new URL(`/packs/${M.CHALLENGE_VERSION}/${s}/${packs[s]}.json`, request.url);

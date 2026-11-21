@@ -10,7 +10,7 @@ export async function onRequestPost({ request, env }) {
   const packs = [...r].map((x) => x % n);
   const id = randomId(16);
   await DB.prepare('INSERT INTO sessions (id, token_hash, packs, started_at) VALUES (?1, ?2, ?3, ?4)')
-    .bind(id, th, packs.join(','), Date.now())
+    .bind(id, th, M.CHALLENGE_VERSION + ':' + packs.join(','), Date.now()) // 版も記録（問題の作り方を変えた後に古い挑戦を採点しないため）
     .run();
   return json({ id, version: M.CHALLENGE_VERSION, packs });
 }

@@ -8,7 +8,7 @@
  *   27〜33 : 東 南 西 北 白 發 中
  *
  * 手牌は「牌の種類ごとの枚数」34要素の配列 (counts) で扱う。
- * 和了形は通常形 (4面子1雀頭) のみ。七対子・国士無双は対象外。
+ * 和了形は通常形 (4面子1雀頭) と七対子。国士無双は対象外（問題に出ない）。
  */
 (function (root) {
   'use strict';
@@ -70,8 +70,19 @@
     return false;
   }
 
-  /** 14枚 (3n+2枚) が通常形の和了形か */
+  /** 14枚が七対子の和了形か（同じ牌4枚は2対子と数えない） */
+  function isChiitoi(c) {
+    let pairs = 0;
+    for (let t = 0; t < 34; t++) {
+      if (c[t] === 2) pairs++;
+      else if (c[t] !== 0) return false;
+    }
+    return pairs === 7;
+  }
+
+  /** 14枚 (3n+2枚) が和了形か（通常形または七対子） */
   function isAgari(c) {
+    if (isChiitoi(c)) return true;
     for (let p = 0; p < 34; p++) {
       if (c[p] < 2) continue;
       c[p] -= 2;
@@ -100,11 +111,32 @@
   // ---- シャンテン数 --------------------------------------------------------
 
   /**
-   * 通常形 (4面子1雀頭) のシャンテン数。13枚なら 0=聴牌、14枚なら -1=和了。
+   * シャンテン数（通常形と七対子の小さいほう）。13枚なら 0=聴牌、14枚なら -1=和了。
+   */
+  function shanten(c) {
+    let n = 0;
+    for (let t = 0; t < 34; t++) n += c[t];
+    const r = shantenRegular(c);
+    return n >= 13 ? Math.min(r, shantenChiitoi(c)) : r;
+  }
+
+  /** 七対子のシャンテン数: 6 − 対子の種類数 ＋ 足りない種類数（同じ牌4枚は対子1つ） */
+  function shantenChiitoi(c) {
+    let pairs = 0;
+    let kinds = 0;
+    for (let t = 0; t < 34; t++) {
+      if (c[t] >= 1) kinds++;
+      if (c[t] >= 2) pairs++;
+    }
+    return 6 - pairs + Math.max(0, 7 - kinds);
+  }
+
+  /**
+   * 通常形 (4面子1雀頭) のシャンテン数。
    * 面子・塔子・雀頭の取り方を全通り探して 8 - 2×面子 - 塔子 - 雀頭 の最小を取る
    * (面子+塔子は4つまで)。
    */
-  function shanten(c) {
+  function shantenRegular(c) {
     let best = 8;
     function dfs(i, m, t, p) {
       while (i < 34 && c[i] === 0) i++;
@@ -649,7 +681,8 @@
   }
 
   // 問題の作り方を変えたら版を上げる（同じ日付でも別の問題になる）
-  const DAILY_VERSION = 'v1';
+  // v2: 七対子を和了形・シャンテン数に含めた
+  const DAILY_VERSION = 'v2';
   const DAILY_COUNT = 10;
 
   /**
@@ -689,7 +722,7 @@
     { key: 'twoSeries', label: '二向聴連続', shanten: 2, series: true, rule: 'max', partial: true },
   ];
   const CHALLENGE_PER_SECTION = 10;
-  const CHALLENGE_VERSION = 'v1';
+  const CHALLENGE_VERSION = 'v2'; // v2: 七対子を含めた
   const CHALLENGE_PACKS = 500; // モードごとのパック数（0〜499）
 
   /**
@@ -764,6 +797,9 @@
     countsToList,
     listToCounts,
     isAgari,
+    isChiitoi,
+    shantenRegular,
+    shantenChiitoi,
     getWaits,
     shanten,
     getUkeire,

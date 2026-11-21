@@ -125,7 +125,23 @@ test('シャンテン数: 基本形', () => {
   assert.equal(sh('123m456p789s11z23m'), 0);   // 両面待ち
   assert.equal(sh('123m456p789s11z25m'), 1);   // 3面子+雀頭+浮き牌2枚
   assert.equal(sh('123m456p11z159m15s'), 3);   // 2面子+雀頭+浮き牌5枚
-  assert.equal(sh('159m159p159s1234z'), 8);    // 面子も塔子もない
+  assert.equal(M.shantenRegular(M.listToCounts(parse('159m159p159s1234z'))), 8); // 面子も塔子もない
+  assert.equal(sh('159m159p159s1234z'), 6);    // 七対子なら6（13種バラバラ）
+});
+
+test('七対子：和了・待ち・シャンテン数・受け入れ', () => {
+  const sh = (s) => M.shanten(M.listToCounts(parse(s)));
+  assert.equal(M.isAgari(M.listToCounts(parse('1133m5577p2299s11z'))), true);
+  assert.equal(M.isAgari(M.listToCounts(parse('1111m5577p2299s11z'))), false); // 同じ牌4枚は2対子にならない
+  assert.deepEqual(waitsOf('1133m5577p2299s1z'), parse('1z'));                    // 単騎
+  assert.deepEqual(waitsOf('112233m5577p22s4s'), parse('4s'));                  // 七対子・通常形どちらも4索
+  assert.deepEqual(waitsOf('1111m5577p2299s1z'), []);                             // 4枚使いは聴牌しない
+  assert.equal(sh('2233444p5p1s2299s'), 1);
+  // 報告のあった形：5筒と1索（七対子で聴牌）も受け入れに入る
+  assert.deepEqual(M.getUkeire(M.listToCounts(parse('2233444p5p1s2299s'))), parse('356p1239s'));
+  // 通常形では遠いが七対子なら一向聴
+  assert.equal(M.shantenRegular(M.listToCounts(parse('1133m5588p22s157z'))) > 1, true);
+  assert.equal(sh('1133m5588p22s157z'), 1);
 });
 
 test('シャンテン数: 総当たりと一致（聴牌・一向聴の判定）', () => {
