@@ -65,6 +65,12 @@ node tests/server.test.mjs     # 名前・採点・証明書のテスト
 - サーバー：`functions/`（Cloudflare Pages Functions）と `server/`。データベースは D1（`DB`）。設定手順は `docs/hosting.md` の 7.
 - 手元での確認：`node scripts/build-site.js` の後、`npx wrangler pages dev site --d1 DB --binding ADMIN_KEY=test`
 
+## β版とバグ報告
+- 右上の「バグ報告」（いつでも）と、答え合わせの下の「この問題のバグを報告」から送れる。種類（判定・表示・止まる・その他）と200文字までのコメント。
+- 自動で付けるもの：いまの問題（手牌・ツモ・答え・正解の一覧・モード・版）、ブラウザの種類と画面サイズ、直前のエラー5件（`index.html` の先頭で記録）。
+- 1台から1時間に10件まで。報告はほかの人には見えない。`functions/api/report.js`、一覧は管理用の `reports`（`docs/hosting.md` の 7.）。
+- サーバーがない場所（claude.ai の公開版など）ではボタンを出さない。
+
 ## 今後の拡張メモ
 - 聴牌版にも「待ち枚数最大の切り方のみ正解」を付けるなら `yRule()` の条件を広げるだけ。
 

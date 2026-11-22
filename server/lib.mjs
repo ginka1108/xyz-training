@@ -49,6 +49,16 @@ const SCHEMA = [
     flagged INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS reports (
+    id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    comment TEXT NOT NULL,
+    context TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS reports_token ON reports (token_hash, created_at)`,
   `CREATE INDEX IF NOT EXISTS runs_week ON runs (week, score DESC, time_ms)`,
   `CREATE INDEX IF NOT EXISTS runs_token ON runs (token_hash)`,
 ];

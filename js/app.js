@@ -194,7 +194,9 @@
 
   // ---- 画面切り替え ---------------------------------------------------------
 
+  let curScreen = 'start';
   function show(name) {
+    curScreen = name;
     for (const s of ['start', 'play', 'summary', 'cert', 'rank']) $('screen-' + s).hidden = s !== name;
     $('progress').hidden = name !== 'play';
     window.scrollTo(0, 0);
@@ -1027,6 +1029,112 @@
     }
   }
 
+  // ---- バグ報告 ---------------------------------------------------------------
+  // 報告には、いま出ている問題・端末の情報・直前のエラーを自動で付ける
+
+  /** 牌の並び → "2233444p5p" の形 */
+  function handStr(list) {
+    let out = '', buf = '', suit = '';
+    for (const t of list.slice().sort((a, b) => a - b)) {
+      const c = M.tileCode(t);
+      if (c[1] !== suit && buf) { out += buf + suit; buf = ''; }
+      suit = c[1];
+      buf += c[0];
+    }
+    return out + (buf ? buf + suit : '');
+  }
+
+  function problemContext() {
+    const q = game.q;
+    if (!q || curScreen !== 'play') return null;
+    const p = q.problem;
+    const it = game.item || {};
+    const last = q.phase === 'result' ? game.results[game.results.length - 1] : null;
+    return {
+      mode: game.mode,
+      modeKey: it.modeKey || null,
+      section: it.section != null ? M.CHALLENGE_SECTIONS[it.section].key : null,
+      daily: game.mode === 'daily' && game.daily ? game.daily.date : null,
+      no: it.overall || it.idx || null,
+      hand: handStr(p.hand),
+      draw: M.tileCode(p.draw),
+      phase: q.phase,
+      y: q.discard != null ? M.tileCode(q.discard) : null,
+      z: q.selected.size ? handStr([...q.selected]) : '',
+      result: last ? (last.ok ? 'ok' : last.partial ? 'part' : 'ng') + (last.reason ? '：' + last.reason : '') : null,
+      correct: p.answers.map((a) => `${M.tileCode(a.discard)}→${handStr(a.waits)}（${a.remaining}枚）`),
+      raw: { hand: p.hand, draw: p.draw },
+    };
+  }
+
+  function reportContext() {
+    return {
+      screen: curScreen,
+      versions: { challenge: M.CHALLENGE_VERSION, daily: M.DAILY_VERSION },
+      problem: problemContext(),
+      device: {
+        ua: navigator.userAgent.slice(0, 300),
+        lang: navigator.language,
+        screen: `${window.innerWidth}x${window.innerHeight}@${window.devicePixelRatio || 1}`,
+        touch: 'ontouchstart' in window,
+      },
+      errors: (window.__xyzErrors || []).slice(),
+      at: new Date().toISOString(),
+    };
+  }
+
+  function openReport(kind) {
+    const f = $('reportForm');
+    f.reset();
+    if (kind) f.querySelector(`input[value="${kind}"]`).checked = true;
+    const playing = game.q && curScreen === 'play';
+    const running = playing && game.q.phase !== 'result';
+    $('reportNote').textContent =
+      (playing ? 'いまの問題（手牌・ツモ・あなたの答え）、' : '') +
+      'ブラウザの種類と画面サイズ、直前に起きたエラーを一緒に送ります。報告はほかの人には見えません。' +
+      (running ? '\n出題中のタイマーは止まりません。' : '');
+    $('reportSheet').hidden = false;
+    (kind ? $('reportComment') : f.querySelector('input[name="kind"]')).focus();
+  }
+
+  function closeReport() {
+    $('reportSheet').hidden = true;
+  }
+
+  async function sendReport(ev) {
+    ev.preventDefault();
+    const f = $('reportForm');
+    const kind = (f.querySelector('input[name="kind"]:checked') || {}).value;
+    const comment = $('reportComment').value.trim();
+    if (kind === 'other' && !comment) {
+      toast('「その他」のときは内容を書いてください');
+      $('reportComment').focus();
+      return;
+    }
+    const btn = $('reportSend');
+    btn.disabled = true;
+    try {
+      await api('/api/report', { kind, comment, context: reportContext() });
+      closeReport();
+      toast('報告を受け付けました。ありがとうございます');
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function initReport() {
+    if (!serverAvailable()) return;
+    $('reportOpen').hidden = false;
+    $('reportProblem').hidden = false;
+    $('reportOpen').addEventListener('click', () => openReport());
+    $('reportProblem').addEventListener('click', () => openReport('judge'));
+    $('reportCancel').addEventListener('click', closeReport);
+    $('reportSheet').addEventListener('click', (e) => { if (e.target === $('reportSheet')) closeReport(); });
+    $('reportForm').addEventListener('submit', sendReport);
+  }
+
   // ---- 起動 -----------------------------------------------------------------
 
   function renderDemo() {
@@ -1045,6 +1153,7 @@
     updateModeDesc();
     updateDailyButton();
     loadMe();
+    initReport();
     $('startChallenge').addEventListener('click', () => startChallenge());
     $('openRanking').addEventListener('click', () => openRanking());
     for (const b of document.querySelectorAll('.rank-tabs button')) b.addEventListener('click', () => openRanking(b.dataset.period));
@@ -1077,6 +1186,10 @@
     $('againBtn').addEventListener('click', () => startSet(game.mode));
     $('homeBtn').addEventListener('click', () => { renderDemo(); updateDailyButton(); show('start'); });
     document.addEventListener('keydown', (e) => {
+      if (!$('reportSheet').hidden) {
+        if (e.key === 'Escape') closeReport();
+        return;
+      }
       if (e.key === 'Enter' && game.q && game.q.phase === 'z') {
         e.preventDefault();
         submitZ();

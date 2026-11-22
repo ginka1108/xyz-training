@@ -15,13 +15,34 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="style.css">
+<script>
+  // バグ報告に付けるため、起きたエラーを最後の数件だけ覚えておく（読み込み中のエラーも拾えるよう先頭に置く）
+  window.__xyzErrors = [];
+  (function () {
+    function keep(msg, where) {
+      var a = window.__xyzErrors;
+      a.push({ msg: String(msg).slice(0, 300), where: String(where || '').slice(0, 200), t: Date.now() });
+      if (a.length > 5) a.shift();
+    }
+    window.addEventListener('error', function (e) {
+      keep(e.message || (e.target && e.target.src ? '読み込み失敗' : 'error'), e.filename ? e.filename.split('/').pop() + ':' + e.lineno + ':' + e.colno : (e.target && (e.target.src || e.target.href)));
+    }, true);
+    window.addEventListener('unhandledrejection', function (e) {
+      var r = e.reason;
+      keep(r && r.message ? r.message : r, r && r.stack ? r.stack.split('\n')[1] : '');
+    });
+  })();
+</script>
 </head>
 <body>
 <div class="app">
 
   <header class="topbar">
-    <span class="brand">XYZトレーニング</span>
-    <span class="progress" id="progress" hidden></span>
+    <span class="brand">XYZトレーニング<span class="beta">β</span></span>
+    <span class="topbar-right">
+      <span class="progress" id="progress" hidden></span>
+      <button class="report-open" id="reportOpen" type="button" hidden>バグ報告</button>
+    </span>
   </header>
 
   <!-- スタート画面 -->
@@ -70,6 +91,7 @@
     <details class="settings" id="settings">
       <summary>ルールと設定</summary>
       <ul class="rules">
+        <li>いまはβ版です。判定がおかしい・表示が崩れる・止まるなどのバグを見つけたら、右上の「バグ報告」から教えてください。</li>
         <li>聴牌する切り方ならどれでも正解。待ちは切った牌に合わせて判定。</li>
         <li>和了形は4面子1雀頭と七対子（国士無双は出題しない）。待ち・受け入れには七対子で聴牌する牌も含む。役の有無は問わない。</li>
         <li>手牌で4枚使っている牌は待ちに含めない。</li>
@@ -116,6 +138,7 @@
       <h3 class="answers-title" id="answersTitle">この手で聴牌する切り方</h3>
       <div class="answers" id="answers"></div>
       <button class="btn primary big" id="nextBtn" type="button">次の問題</button>
+      <button class="report-link" id="reportProblem" type="button" hidden>この問題のバグを報告</button>
     </div>
   </section>
 
@@ -169,6 +192,29 @@
     </div>
     <button class="btn" id="rankHome" type="button">トップへ</button>
   </section>
+
+  <!-- バグ報告 -->
+  <div class="sheet-back" id="reportSheet" hidden>
+    <form class="sheet" id="reportForm" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+      <h2 id="reportTitle">バグを報告</h2>
+      <fieldset class="report-kinds">
+        <legend>どんなバグですか</legend>
+        <label><input type="radio" name="kind" value="judge" required> 判定がおかしい</label>
+        <label><input type="radio" name="kind" value="display"> 表示が崩れる</label>
+        <label><input type="radio" name="kind" value="stuck"> 動かない・止まる</label>
+        <label><input type="radio" name="kind" value="other"> その他</label>
+      </fieldset>
+      <label class="report-comment">
+        <span>くわしく（任意・200文字まで）</span>
+        <textarea id="reportComment" maxlength="200" rows="3" placeholder="例：5筒を選んだのに「余計」になった"></textarea>
+      </label>
+      <p class="report-note" id="reportNote"></p>
+      <div class="actions">
+        <button class="btn" id="reportCancel" type="button">やめる</button>
+        <button class="btn primary" id="reportSend" type="submit">送る</button>
+      </div>
+    </form>
+  </div>
 
   <div class="toast" id="toast" role="status" hidden></div>
 

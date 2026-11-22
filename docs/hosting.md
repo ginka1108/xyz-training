@@ -157,6 +157,11 @@ curl -s -X POST https://xyz-training.pages.dev/api/admin -H 'x-admin-key: <合�
 | その人をランキングから締め出す | `{"action":"ban","name":"その名前"}` |
 | 締め出しを解く | `{"action":"unban","name":"その名前"}` |
 | 記録を1件消す（証明書の No.） | `{"action":"deleteRun","runId":"rtvm37e6ue"}` |
+| 未対応のバグ報告を見る（新しい順） | `{"action":"reports"}`（対応済みも含めるなら `{"action":"reports","all":true}`） |
+| バグ報告を対応済みにする | `{"action":"doneReport","reportId":"uyqahkm6"}`（戻すなら `undoReport`） |
+
+バグ報告の一覧は、そのまま Claude に貼れば調べられる。手牌は `hand`（13枚）と `draw`（ツモ）に `2233444p5p1s2299s` の形で入っている。
+読みやすくしたいときは、末尾に `| python3 -m json.tool` を付ける。
 
 ## 8. 必要になったら（今はやらなくていい）
 - **独自ドメイン**：ドメインを買ったら、Pages プロジェクトの **Custom domains** から追加する。
